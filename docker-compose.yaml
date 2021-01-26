@@ -1,0 +1,332 @@
+version: '3.2'
+
+services:
+
+  mongo:
+    image: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: 'dbuser'
+      MONGO_INITDB_ROOT_PASSWORD: 'pwd4mongo'
+    ports:
+      - 27017:27017
+    volumes:
+      - mongo-db:/data/db
+      - ./configs/mongo-scripts:/var/scripts:ro
+
+  mysql:
+    image: mysql:5.7
+    restart: always
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_DATABASE: 'db'
+      MYSQL_USER: 'dbuser'
+      MYSQL_PASSWORD: 'pwd4mysql'
+      MYSQL_ROOT_PASSWORD: 'pwd4mysqlroot'
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql-db:/var/lib/mysql
+      - ./configs/mysql-scripts:/var/scripts:ro
+
+  redis:
+    image: redis
+    restart: always
+    ports:
+      - 6379:6379
+
+  fnserver:
+    image: fnproject/fnserver
+    restart: always
+    privileged: true
+    ports:
+      - "8080:8080"
+    expose:
+      - 2375
+    environment:
+      FN_DB_URL: "mysql://dbuser:pwd4mysql@tcp(mysql:3306)/funcs"
+      FN_IOFS_DOCKER_PATH: "${HOME}/.fn/iofs"
+      FN_IOFS_PATH: "/iofs"
+      FN_MQ_URL: "redis://redis:6379"
+      FN_LOG_LEVEL: "debug"
+    volumes:
+      - ${HOME}/.fn/iofs:/iofs
+      - fn-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    links:
+      - mysql:mysql
+      - redis:redis
+      - docker-registry:docker-registry
+    logging:
+      driver: "none"
+
+  elasticsearch:
+    build:
+      context: elasticsearch/
+      args:
+        ELK_VERSION: 7.5.0
+    restart: always
+    volumes:
+      - type: bind
+        source: ./elasticsearch/config/elasticsearch.yml
+        target: /usr/share/elasticsearch/config/elasticsearch.yml
+        read_only: true
+      - type: volume
+        source: ./elasticsearch
+        target: /usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      ES_JAVA_OPTS: "-Xmx256m -Xms256m"
+      # Use single node discovery in order to disable production mode and avoid bootstrap checks
+      # see https://www.elastic.co/guide/en/elasticsearch/reference/current/bootstrap-checks.html
+      discovery.type: single-node
+      ELASTIC_PASSWORD: changeme
+    logging:
+      driver: "none"
+
+  logstash:
+    build:
+      context: logstash/
+      args:
+        ELK_VERSION: 7.5.0
+    restart: always
+    volumes:
+      - type: bind
+        source: ./logstash/config/logstash.yml
+        target: /usr/share/logstash/config/logstash.yml
+        read_only: true
+      - type: bind
+        source: ./logstash/pipeline
+        target: /usr/share/logstash/pipeline
+        read_only: true
+    ports:
+      - "6000:6000"
+      - "6001:6001"
+      - "6002:6002"
+      - "9600:9600"
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+    depends_on:
+      - elasticsearch
+    logging:
+      driver: "none"
+
+  kibana:
+    build:
+      context: kibana/
+      args:
+        ELK_VERSION: 7.5.0
+    restart: always
+    volumes:
+      - type: bind
+        source: ./kibana/config/kibana.yml
+        target: /usr/share/kibana/config/kibana.yml
+        read_only: true
+    ports:
+      - "5601:5601"
+    # networks:
+    #   - elk
+    depends_on:
+      - logstash
+      - elasticsearch
+    logging:
+      driver: "none"
+
+  docker-registry:
+    image: registry
+    restart: always
+    ports:
+      - 5000:5000
+    volumes:
+      - ./configs/docker-registry/config.yml:/etc/docker/registry/config.yml:ro
+    links:
+      - mds-ns:mds-ns
+
+  docker-registry-ui:
+    image: quiq/docker-registry-ui
+    restart: always
+    ports:
+      - 5001:5001
+    volumes:
+      - ./configs/docker-registry-ui/config.yml:/opt/config.yml:ro
+    links:
+      - docker-registry:docker-registry
+
+  mds-identity-proxy:
+    image: nginx
+    restart: always
+    ports:
+      - 8079:80 # HACK TODO NOTE: It is best to not include this in non local-development environments.
+      - 8081:443
+    volumes:
+      - ./configs/mds-identity-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./configs/mds-identity-proxy/nginx-selfsigned.crt:/etc/nginx/nginx-selfsigned.crt:ro
+      - ./configs/mds-identity-proxy/nginx-selfsigned.key:/etc/nginx/nginx-selfsigned.key:ro
+    links:
+      - mds-identity:mds-identity
+
+  mds-identity:
+    image: mdscloud/mds-cloud-identity:latest
+    restart: always
+    environment:
+      MDS_IDENTITY_DB_URL: 'mongodb://dbuser:pwd4mongo@mongo:27017/mds-identity'
+      MDS_LOG_URL: 'http://logstash:6002'
+      BYPASS_USER_ACTIVATION: 'true'
+      PWD_HASH_CYCLES: 14
+      IDENTITY_SECRET_PRIVATE: '/root/keys/key'
+      IDENTITY_SECRET_PRIVATE_PASS: 'some-pass'
+      IDENTITY_SECRET_PUBLIC: '/root/keys/key.pub.pem'
+      ORID_PROVIDER_KEY: 'mdsCloud'
+    volumes:
+      - ./configs/mds-identity:/root/keys:ro
+    links:
+      - mongo:mongo
+      - logstash:logstash
+
+  mds-ns:
+    image: mdscloud/mds-notification-service:latest
+    restart: always
+    ports:
+      - 8082:8888
+    environment:
+      MDS_LOG_URL: 'http://logstash:6002'
+      REDIS_URL: 'redis://redis:6379'
+      ORID_PROVIDER_KEY: 'mdsCloud'
+      MDS_IDENTITY_URL: 'http://mds-identity:8888'
+    links:
+      - logstash:logstash
+      - redis:redis
+      - mds-identity:mds-identity
+
+  mds-qs:
+    image: mdscloud/mds-queue-service:latest
+    restart: always
+    ports:
+      - 8083:8888
+    environment:
+      MDS_LOG_URL: 'http://logstash:6002'
+      MDS_QS_DB_URL: 'redis://redis:6379'
+      ORID_PROVIDER_KEY: 'mdsCloud'
+      MDS_IDENTITY_URL: 'http://mds-identity:8888'
+    links:
+      - logstash:logstash
+      - redis:redis
+      - mds-identity:mds-identity
+
+  mds-fs:
+    image: mdscloud/mds-file-service:latest
+    restart: always
+    ports:
+      - 8084:8888
+    environment:
+      NODE_ENV: 'production'
+      MDS_UPLOAD_FOLDER: '/UploadService'
+      MDS_LOG_URL: 'http://logstash:6002'
+      MDS_IDENTITY_URL: 'http://mds-identity:8888'
+      ORID_PROVIDER_KEY: 'mdsCloud'
+    volumes:
+      - file-service-data:/UploadService
+    links:
+      - logstash:logstash
+
+  mds-sf:
+    image: mdscloud/mds-serverless-functions:latest
+    restart: always
+    ports:
+      - 8085:8888
+    environment:
+      NODE_ENV: 'production'
+      MDS_FN_RUNTIMES: 'node'
+      MDS_FN_USE_INVOKE_THROTTLE: 'true'
+      MDS_FN_INVOKE_THROTTLE_MAX_CONCURRENT: '5'
+      MDS_FN_MONGO_URL: 'mongodb://dbuser:pwd4mongo@mongo:27017'
+      MDS_LOG_URL: 'http://logstash:6002'
+      MDS_FN_MONGO_DB_NAME: 'mdsCloudServerlessFunctions'
+      MDS_FN_FNPROJECT_URL: 'http://fnserver:8080'
+      MDS_IDENTITY_URL: 'http://mds-identity:8888'
+      MDS_FN_QS_URL: "http://mds-qs:8888"
+      MDS_FN_FS_URL: "http://mds-fs:8888"
+      MDS_FN_NS_URL: "http://mds-ns:8888"
+      MDS_FN_NOTIFICATION_TOPIC: 'orid:1:mdsCloud:::1:ns:mdsCloudServerlessFunctions-FnProject'
+      MDS_FN_WORK_QUEUE: 'orid:1:mdsCloud:::1:qs:mdsCloudServerlessFunctions-FnProjectWork'
+      MDS_FN_WORK_CONTAINER: 'orid:1:mdsCloud:::1:fs:mdsCloudServerlessFunctionsWork'
+      MDS_FN_INVOKE_URL_TEMPLATE: 'http://localhost:8085/invoke/{funcId}'
+      ORID_PROVIDER_KEY: 'mdsCloud'
+      MDS_FN_SYS_USER: "mdsCloud"
+      MDS_FN_SYS_ACCOUNT: "1"
+      MDS_FN_SYS_PASSWORD: "MDS_SYS_PASSWORD"
+    links:
+      - logstash:logstash
+      - mongo:mongo
+      - mds-qs:mds-qs
+      - mds-fs:mds-fs
+      - mds-ns:mds-ns
+      - fnserver:fnserver
+
+  mds-sf-fnProjectMinion:
+    image: mdscloud/mds-fnproject-minion:latest
+    restart: always
+    environment:
+      MDS_LOG_URL: 'http://logstash:6002'
+      MDS_FN_MONGO_URL: "mongodb://dbuser:pwd4mongo@mongo:27017"
+      MDS_FN_MONGO_DB_NAME: "mdsCloudServerlessFunctions"
+      MDS_FN_FNPROJECT_URL: "http://fnserver:8080"
+      MDS_IDENTITY_URL: 'http://mds-identity:8888'
+      MDS_FN_QS_URL: "http://mds-qs:8888"
+      MDS_FN_FS_URL: "http://mds-fs:8888"
+      MDS_FN_NS_URL: "http://mds-ns:8888"
+      MDS_FN_CONTAINER_HOST: 'docker-registry:5000'
+      MDS_FN_NOTIFICATION_TOPIC: "orid:1:mdsCloud:::1:ns:mdsCloudServerlessFunctions-FnProject"
+      MDS_FN_WORK_QUEUE: "orid:1:mdsCloud:::1:qs:mdsCloudServerlessFunctions-FnProjectWork"
+      MDS_FN_WORK_QUEUE_DLQ: "orid:1:mdsCloud:::1:qs:mdsCloudServerlessFunctions-FnProjectWork-dlq"
+      ORID_PROVIDER_KEY: "mdsCloud"
+      MDS_FN_SYS_USER: "mdsCloud"
+      MDS_FN_SYS_ACCOUNT: "1"
+      MDS_FN_SYS_PASSWORD: "MDS_SYS_PASSWORD"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    links:
+      - logstash:logstash
+      - mongo:mongo
+      - mds-qs:mds-qs
+      - mds-fs:mds-fs
+      - mds-ns:mds-ns
+      - fnserver:fnserver
+      - docker-registry:docker-registry
+
+  mds-sm:
+    image: mdscloud/mds-state-machine:latest
+    restart: always
+    ports:
+      - 8086:8888
+    environment:
+      NODE_ENV: 'production'
+      FORCE_INTERNAL_WORKER: 'true'
+      FN_SM_DB_URL: 'mysql://root:pwd4mysqlroot@mysql/mds-sm'
+      ORID_PROVIDER_KEY: 'mdsCloud'
+      PENDING_QUEUE_NAME: 'orid:1:mdsCloud:::1:qs:mds-sm-pendingQueue'
+      IN_FLIGHT_QUEUE_NAME: 'orid:1:mdsCloud:::1:qs:mds-sm-inFlightQueue'
+      MDS_IDENTITY_URL: 'http://mds-identity:8888'
+      MDS_SM_QS_URL: "http://mds-qs:8888"
+      MDS_SM_SF_URL: "http://mds-sf:8888"
+      MDS_SM_SYS_USER: "mdsCloud"
+      MDS_SM_SYS_ACCOUNT: "1"
+      MDS_SM_SYS_PASSWORD: "MDS_SYS_PASSWORD"
+    links:
+      - mds-qs:mds-qs
+      - mysql:mysql
+
+# networks:
+#   elk:
+#     driver: bridge
+
+volumes:
+  mysql-db:
+  mongo-db:
+  elasticsearch:
+  jenkins-home:
+  file-service-data:
+  fn-iofs:
+  fn-data:
