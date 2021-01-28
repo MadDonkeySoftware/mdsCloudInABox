@@ -1,3 +1,5 @@
 configs/mds-identity/key*
 configs/mds-identity/pass
 configs/mds-identity-proxy/nginx-selfsigned*
+awkvars.out
+development-passwords.txt

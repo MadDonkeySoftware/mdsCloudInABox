@@ -1,11 +1,41 @@
 #!/usr/bin/env sh
 
-MYSQL_ROOT_PASSWORD='pwd4mysqlroot'
-MONGO_ROOT_PASSWORD='pwd4mongo'
+# With special characters
+# MYSQL_ROOT_PASSWORD=$(tr -dc '(\&\_a-zA-Z0-9\^\*\@' < /dev/urandom | head -c 32)
+# MYSQL_USER_PASSWORD=$(tr -dc '(\&\_a-zA-Z0-9\^\*\@' < /dev/urandom | head -c 32)
+# MONGO_ROOT_PASSWORD=$(tr -dc '(\&\_a-zA-Z0-9\^\*\@' < /dev/urandom | head -c 32)
 
-echo 'Pulling all dependent images to make the rest of the process quicker'
-docker-compose pull;
+# Without special characters
+MYSQL_ROOT_PASSWORD=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
+MYSQL_USER_PASSWORD=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
+MONGO_ROOT_PASSWORD=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
+
+docker-compose down -v;
 docker-compose build;
+
+if [ -f ./docker-compose-new.yaml ]; then
+    rm -f ./docker-compose-new.yaml
+fi
+
+echo 'Configuring the databases with random passwords'
+NEW_MDS_IDENTITY_DB_URL="mongodb://dbuser:$MONGO_ROOT_PASSWORD@mongo:27017/mds-identity"
+NEW_MDS_FN_MONGO_URL="mongodb://dbuser:$MONGO_ROOT_PASSWORD@mongo:27017"
+NEW_MDS_FN_SM_DB_URL="mysql://root:$MYSQL_ROOT_PASSWORD@mysql/mds-sm"
+NEW_MDS_FN_SERVER_DB_URL="mysql://dbuser:$MYSQL_USER_PASSWORD@tcp(mysql:3306)/funcs"
+
+awk -f ./mysql-and-mongo-conn.awk \
+  -v MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD \
+  -v MYSQL_USER_PASSWORD=$MYSQL_USER_PASSWORD \
+  -v MONGO_PASSWORD=$MONGO_ROOT_PASSWORD \
+  -v IDENTITY_DB_URL=$NEW_MDS_IDENTITY_DB_URL \
+  -v FN_MONGO_URL=$NEW_MDS_FN_MONGO_URL \
+  -v FN_SM_DB_URL=$NEW_MDS_FN_SM_DB_URL \
+  -v FN_SERVER_DB_URL=$NEW_MDS_FN_SERVER_DB_URL \
+  ./docker-compose.yaml >> ./docker-compose-new.yaml
+
+rm -f ./docker-compose.yaml
+mv ./docker-compose-new.yaml ./docker-compose.yaml
+echo 'Complete!'
 
 docker-compose up -d mysql;
 echo 'Sleeping a bit to let mysql fully init. There is no way to know a exact time'
@@ -36,13 +66,19 @@ cp -f ./nginx-selfsigned.key ./configs/mds-identity-proxy
 rm -f ./nginx-selfsigned.crt ./nginx-selfsigned.key
 echo 'Complete!'
 
+echo 'Updating mongo initialization script...'
+awk "\$1 == \"pwd:\" { \$1 = \"  \" \$1; \$2 = \"\\\"\" \"$MONGO_ROOT_PASSWORD\" \"\\\",\" } 1" ./configs/mongo-scripts/mongo-init.js >> ./configs/mongo-scripts/mongo-init-new.js
+rm -f ./configs/mongo-scripts/mongo-init.js
+mv ./configs/mongo-scripts/mongo-init-new.js ./configs/mongo-scripts/mongo-init.js
+echo 'Complete!'
+
 echo 'Initializing MongoDB...'
 docker-compose up -d mongo;
 sleep 5;
 docker exec mdscloudinabox_mongo_1 mongo -u dbuser -p $MONGO_ROOT_PASSWORD /var/scripts/mongo-init.js;
 echo 'Complete!'
 
-echo 'Starting the identity service so you can capture the root password.'
+echo 'Starting the identity service so root system user password can be captured.'
 docker-compose up -d mds-identity;
 sleep 30;
 MDS_USER_PASS=$(docker logs mdscloudinabox_mds-identity_1 2>&1 | grep password | sed -n 's/^.*password":"\(\S*\)","msg".*$/\1/p')
@@ -51,7 +87,10 @@ echo 'Complete!'
 docker-compose down;
 
 echo 'Attempting to modify your docker-compose.yaml with the new system password'
-awk "\$1 == \"MDS_SM_SYS_PASSWORD:\" || \$1 == \"MDS_FN_SYS_PASSWORD:\" { \$1 = \"      \" \$1; \$2 = \"\\\"$MDS_USER_PASS\\\"\" } 1" ./docker-compose.yaml >> ./docker-compose-new.yaml
+awk -f ./config-system-user.awk \
+  -v MDS_USER_PASS=$MDS_USER_PASS \
+  ./docker-compose.yaml >> ./docker-compose-new.yaml
+
 rm -f ./docker-compose.yaml
 mv ./docker-compose-new.yaml ./docker-compose.yaml
 echo 'Complete!'
@@ -63,18 +102,23 @@ rm -f ./configs/docker-registry/config.yml
 mv ./configs/docker-registry/config-new.yml ./configs/docker-registry/config.yml
 echo 'Complete!'
 
-echo ''
-echo '  ===================================='
-echo '  ==== Your Auto-configured items ===='
-echo '  ===================================='
-echo "  The mysql root password is \"$MYSQL_ROOT_PASSWORD\""
-echo "  The mongo root password is \"$MONGO_ROOT_PASSWORD\""
-echo "  mdsCloud password is \"$MDS_USER_PASS\""
-echo "  The base64 encoded credentials are \"$BASE64_MDS_USER_PASS\""
+echo "
+  ====================================
+  ==== Your Auto-configured items ====
+  ====================================
+  The mysql root password is $MYSQL_ROOT_PASSWORD
+  The mysql user password is $MYSQL_USER_PASSWORD
+  The mongo root password is $MONGO_ROOT_PASSWORD
+  mdsCloud password is $MDS_USER_PASS
+  The base64 encoded credentials are $BASE64_MDS_USER_PASS" > ./development-passwords.txt
+
+cat ./development-passwords.txt
 echo ''
 echo 'Running "git diff" will allow you to verify the auto configuration script.'
 echo 'If any values are blank please fully tear down the environment with the'
-echo 'command "docker-compose down -v" then re-run the prep script.'
+echo 'command "docker-compose down -v" then re-run the prep script. If you need'
+echo 'to reference these passwords later a file named "development-passwords.txt"'
+echo 'has been created for you in this directory.'
 echo ''
 echo "If you are using the MDS CLI don't forget to update any appropriate"
 echo 'environtment configuraitons!'
