@@ -90,9 +90,11 @@ curl --insecure --request POST 'https://localhost:8081/v1/register' \
 * Under Indices, update the "Log Indices" field to include "logstash-*"
   * Ex: `filebeat-*,kibana_sample_data_logs*,logstash-*`
 * Under Log Columns
-  * Remove _____ (fill in name for middle option)
-  * Add Field "name". 
+  * Remove line with "Field"
+  * Add Column, search for item "name".
   * Optionally drag "Message" field to bottom to make logs easier to read
+* Optionally, it may be prudent to familiarize yourself with the
+[Kibana Query Language](https://www.elastic.co/guide/en/kibana/current/kuery-query.html)
 
 ## Allowing mdsCloud to use insecure docker registry
 
