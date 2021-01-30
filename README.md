@@ -30,6 +30,8 @@ below.
 * (Optional) Create the required system items if you will be working with
   serverless functions or any functionality that is dependent upon serverless
   functions.
+* (Optional) Configure your MDS CLI with with `local` and `localAdmin`
+  environments
 * Do whatever work/exploration you're going to do.
 * Stop and optionally cleanup your system.
   * Running the cleanup will remove all container volumes. This means that data
@@ -80,6 +82,28 @@ curl --insecure --request POST 'https://localhost:8081/v1/register' \
 }'
 ```
 
+## Configure MDS CLI environments
+
+Run the `mds config --env local wizard` command to configure the local
+environment. Once complete the `--env local` can be replaced with
+`--env localAdmin` to configure the local administrator environment for the CLI.
+
+A quick description of prompts given and mdsCloudInABox default URLs.
+
+| Prompt                   | Description                                         |
+|--------------------------|-----------------------------------------------------|
+| Account                  | The account number returned after registering.      |
+| User ID                  | The user id to be used with the system.             |
+| Password                 | The password associated with the above user.        |
+| Identity Service URL     | `https://127.0.0.1:8081`                            |
+| Allow self signed certs. | `Y` since local uses an un-trusted self-signed cert |
+| Notification Service URL | `http://127.0.0.1:8082`                             |
+| Queue Service URL        | `http://127.0.0.1:8083`                             |
+| File Service URL         | `http://127.0.0.1:8084`                             |
+| Serverless Function URL  | `http://127.0.0.1:8085`                             |
+| State Machine URL        | `http://127.0.0.1:8086`                             |
+
+
 ## Configure Kibana to view logs
 
 * Log in to the [Kibana UI](http://localhost:5601)
@@ -106,7 +130,8 @@ systems docker instance to allow insecure registries.
 
 ### Required changes
 
-* edit the `/etc/docker/daemon.js` on your host system.
+* edit the `/etc/docker/daemon.json` on your host system.
+  * If this file does not exist, create it.
 * add/edit the below code block
   * The below networks are CIDR notation of the IPv4 non-routable address spaces
 * restart docker
@@ -114,16 +139,12 @@ systems docker instance to allow insecure registries.
 ```
 {
   "insecure-registries": [
-    "10.0.0.0/8"
-    "172.16.0.0/12"
+    "10.0.0.0/8",
+    "172.16.0.0/12",
     "192.168.0.0/16"
   ]
 }
 ```
-
-## Configuring docker registry to emit notifications
-
-* `node -e "console.log(Buffer.from('user:pass').toString('base64))`
 
 # Further Reading
 
