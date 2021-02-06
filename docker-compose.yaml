@@ -168,7 +168,7 @@ services:
       - mds-identity:mds-identity
 
   mds-identity:
-    image: mdscloud/mds-cloud-identity:latest
+    image: mdscloud/mds-cloud-identity:stable
     restart: always
     environment:
       MDS_IDENTITY_DB_URL: 'mongodb://dbuser:pwd4mongo@mongo:27017/mds-identity'
@@ -186,7 +186,7 @@ services:
       - logstash:logstash
 
   mds-ns:
-    image: mdscloud/mds-notification-service:latest
+    image: mdscloud/mds-notification-service:stable
     restart: always
     ports:
       - 8082:8888
@@ -201,7 +201,7 @@ services:
       - mds-identity:mds-identity
 
   mds-qs:
-    image: mdscloud/mds-queue-service:latest
+    image: mdscloud/mds-queue-service:stable
     restart: always
     ports:
       - 8083:8888
@@ -216,7 +216,7 @@ services:
       - mds-identity:mds-identity
 
   mds-fs:
-    image: mdscloud/mds-file-service:latest
+    image: mdscloud/mds-file-service:stable
     restart: always
     ports:
       - 8084:8888
@@ -232,7 +232,7 @@ services:
       - logstash:logstash
 
   mds-sf:
-    image: mdscloud/mds-serverless-functions:latest
+    image: mdscloud/mds-serverless-functions:stable
     restart: always
     ports:
       - 8085:8888
@@ -266,7 +266,7 @@ services:
       - fnserver:fnserver
 
   mds-sf-fnProjectMinion:
-    image: mdscloud/mds-fnproject-minion:latest
+    image: mdscloud/mds-fnproject-minion:stable
     restart: always
     environment:
       MDS_LOG_URL: 'http://logstash:6002'
@@ -297,7 +297,7 @@ services:
       - docker-registry:docker-registry
 
   mds-sm:
-    image: mdscloud/mds-state-machine:latest
+    image: mdscloud/mds-state-machine:stable
     restart: always
     ports:
       - 8086:8888
