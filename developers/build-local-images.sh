@@ -2,13 +2,21 @@
 
 START_DIRECTORY=$(pwd)
 
+PATH_MODIFIER='../..'
+if [[ $START_DIRECTORY != *"developers"* ]]; then
+  PATH_MODIFIER='..'
+fi
+
+echo "Path Modifier: $PATH_MODIFIER"
+
 SOURCE_DIRECTORIES=(
   "mdsCloudIdentity"
   "mdsCloudNotificationService"
   "mdsCloudQueueService"
   "mdsCloudFileService"
   "mdsCloudServerlessFunctions"
-  "mdsCloudFnProjectMinion"
+  "mdsCloudDockerMinion"
+  # "mdsCloudFnProjectMinion"
   "mdsCloudStateMachine"
 )
 
@@ -32,6 +40,9 @@ getImageName(){
     "mdsCloudFnProjectMinion")
       echo -n "local/mds-fnproject-minion:latest"
       ;;
+    "mdsCloudDockerMinion")
+      echo -n "local/mds-docker-minion:latest"
+      ;;
     "mdsCloudStateMachine")
       echo -n "local/mds-state-machine:latest"
       ;;
@@ -43,13 +54,13 @@ getImageName(){
 
 for SOURCE_DIRECTORY in "${SOURCE_DIRECTORIES[@]}"
 do
-  if [ ! -d "../../$SOURCE_DIRECTORY" ]; then
+  if [ ! -d "$PATH_MODIFIER/$SOURCE_DIRECTORY" ]; then
     echo "$SOURCE_DIRECTORY directory does not exist"
     exit 1
   fi
 done
 
-cd ../..
+cd $PATH_MODIFIER
 for SOURCE_DIRECTORY in "${SOURCE_DIRECTORIES[@]}"
 do
   echo "Processing: $SOURCE_DIRECTORY"

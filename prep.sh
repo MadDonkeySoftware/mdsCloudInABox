@@ -124,3 +124,13 @@ echo "If you are using the MDS CLI don't forget to update any appropriate"
 echo 'environtment configuraitons!'
 echo "Ex: mds config --env localAdmin write password $MDS_USER_PASS"
 echo ''
+echo 'Once your MDS CLI administrator config is updated and the docker-compose env.'
+echo 'is running, create the appropriate system level items. You may need to remove '
+echo 'your mds credential cache located at ~/.mds/cache if you encounter errors.'
+echo ''
+echo 'mds qs create --env localAdmin mdsCloudServerlessFunctions-FnProjectWork'
+echo 'mds qs create --env localAdmin mdsCloudServerlessFunctions-FnProjectWork-dlq'
+echo 'mds qs create --env localAdmin mds-sm-pendingQueue'
+echo 'mds qs create --env localAdmin mds-sm-inFlightQueue'
+echo 'mds fs create --env localAdmin mdsCloudServerlessFunctionsWork'
+echo ''

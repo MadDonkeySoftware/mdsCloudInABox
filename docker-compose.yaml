@@ -13,6 +13,8 @@ services:
     volumes:
       - mongo-db:/data/db
       - ./configs/mongo-scripts:/var/scripts:ro
+    logging:
+      driver: "none"
 
   mysql:
     image: mysql:5.7
@@ -28,35 +30,14 @@ services:
     volumes:
       - mysql-db:/var/lib/mysql
       - ./configs/mysql-scripts:/var/scripts:ro
+    logging:
+      driver: "none"
 
   redis:
     image: redis
     restart: always
     ports:
       - 6379:6379
-
-  fnserver:
-    image: fnproject/fnserver
-    restart: always
-    privileged: true
-    ports:
-      - "8080:8080"
-    expose:
-      - 2375
-    environment:
-      FN_DB_URL: "mysql://dbuser:pwd4mysql@tcp(mysql:3306)/funcs"
-      FN_IOFS_DOCKER_PATH: "${HOME}/.fn/iofs"
-      FN_IOFS_PATH: "/iofs"
-      FN_MQ_URL: "redis://redis:6379"
-      FN_LOG_LEVEL: "debug"
-    volumes:
-      - ${HOME}/.fn/iofs:/iofs
-      - fn-data:/app/data
-      - /var/run/docker.sock:/var/run/docker.sock
-    links:
-      - mysql:mysql
-      - redis:redis
-      - docker-registry:docker-registry
     logging:
       driver: "none"
 
@@ -126,8 +107,6 @@ services:
         read_only: true
     ports:
       - "5601:5601"
-    # networks:
-    #   - elk
     depends_on:
       - logstash
       - elasticsearch
@@ -143,6 +122,8 @@ services:
       - ./configs/docker-registry/config.yml:/etc/docker/registry/config.yml:ro
     links:
       - mds-ns:mds-ns
+    logging:
+      driver: "none"
 
   docker-registry-ui:
     image: quiq/docker-registry-ui
@@ -153,6 +134,8 @@ services:
       - ./configs/docker-registry-ui/config.yml:/opt/config.yml:ro
     links:
       - docker-registry:docker-registry
+    logging:
+      driver: "none"
 
   mds-identity-proxy:
     image: nginx
@@ -238,62 +221,45 @@ services:
       - 8085:8888
     environment:
       NODE_ENV: 'production'
-      MDS_FN_RUNTIMES: 'node'
-      MDS_FN_USE_INVOKE_THROTTLE: 'true'
-      MDS_FN_INVOKE_THROTTLE_MAX_CONCURRENT: '5'
       MDS_FN_MONGO_URL: 'mongodb://dbuser:pwd4mongo@mongo:27017'
       MDS_LOG_URL: 'http://logstash:6002'
       MDS_FN_MONGO_DB_NAME: 'mdsCloudServerlessFunctions'
-      MDS_FN_FNPROJECT_URL: 'http://fnserver:8080'
       MDS_IDENTITY_URL: 'http://mds-identity:8888'
-      MDS_FN_QS_URL: "http://mds-qs:8888"
-      MDS_FN_FS_URL: "http://mds-fs:8888"
-      MDS_FN_NS_URL: "http://mds-ns:8888"
-      MDS_FN_NOTIFICATION_TOPIC: 'orid:1:mdsCloud:::1:ns:mdsCloudServerlessFunctions-FnProject'
-      MDS_FN_WORK_QUEUE: 'orid:1:mdsCloud:::1:qs:mdsCloudServerlessFunctions-FnProjectWork'
-      MDS_FN_WORK_CONTAINER: 'orid:1:mdsCloud:::1:fs:mdsCloudServerlessFunctionsWork'
-      MDS_FN_INVOKE_URL_TEMPLATE: 'http://localhost:8085/invoke/{funcId}'
+      # MDS_FN_INVOKE_URL_TEMPLATE: 'http://localhost:8085/invoke/{funcId}'
       ORID_PROVIDER_KEY: 'mdsCloud'
       MDS_FN_SYS_USER: "mdsCloud"
       MDS_FN_SYS_ACCOUNT: "1"
-      MDS_FN_SYS_PASSWORD: "MDS_SYS_PASSWORD"
+      MDS_FN_SYS_PASSWORD: 'MDS_SYS_PASSWORD'
+      MDS_FN_SYS_ALLOW_SELFSIGN_CERT: 'true'
+      MDS_FN_PROVIDER_CONFIG: /configs/provider-config.json
+    volumes:
+      - ./configs/mds-sf/provider-config.json:/configs/provider-config.json:ro
     links:
       - logstash:logstash
       - mongo:mongo
       - mds-qs:mds-qs
       - mds-fs:mds-fs
       - mds-ns:mds-ns
-      - fnserver:fnserver
+      - mds-sf-dockerMinion:mds-sf-dockerMinion
 
-  mds-sf-fnProjectMinion:
-    image: mdscloud/mds-fnproject-minion:stable
+  mds-sf-dockerMinion:
+    image: mdscloud/mds-docker-minion:stable
     restart: always
     environment:
-      MDS_LOG_URL: 'http://logstash:6002'
-      MDS_FN_MONGO_URL: "mongodb://dbuser:pwd4mongo@mongo:27017"
-      MDS_FN_MONGO_DB_NAME: "mdsCloudServerlessFunctions"
-      MDS_FN_FNPROJECT_URL: "http://fnserver:8080"
+      NODE_ENV: 'local'
       MDS_IDENTITY_URL: 'http://mds-identity:8888'
-      MDS_FN_QS_URL: "http://mds-qs:8888"
-      MDS_FN_FS_URL: "http://mds-fs:8888"
-      MDS_FN_NS_URL: "http://mds-ns:8888"
-      MDS_FN_CONTAINER_HOST: 'docker-registry:5000'
-      MDS_FN_NOTIFICATION_TOPIC: "orid:1:mdsCloud:::1:ns:mdsCloudServerlessFunctions-FnProject"
-      MDS_FN_WORK_QUEUE: "orid:1:mdsCloud:::1:qs:mdsCloudServerlessFunctions-FnProjectWork"
-      MDS_FN_WORK_QUEUE_DLQ: "orid:1:mdsCloud:::1:qs:mdsCloudServerlessFunctions-FnProjectWork-dlq"
-      ORID_PROVIDER_KEY: "mdsCloud"
-      MDS_FN_SYS_USER: "mdsCloud"
-      MDS_FN_SYS_ACCOUNT: "1"
-      MDS_FN_SYS_PASSWORD: "MDS_SYS_PASSWORD"
+      ORID_PROVIDER_KEY: 'mdsCloud'
+      MDS_LOG_URL: 'http://logstash:6002'
+      MDS_FN_RUNTIMES: "node"
+      MDS_FN_MONGO_URL: 'mongodb://dbuser:pwd4mongo@mongo:27017'
+      MDS_FN_CONTAINER_HOST: "docker-registry:5000"
+      MDS_FN_CONTAINER_NETWORK: "mdscloudinabox_default"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     links:
       - logstash:logstash
       - mongo:mongo
-      - mds-qs:mds-qs
       - mds-fs:mds-fs
-      - mds-ns:mds-ns
-      - fnserver:fnserver
       - docker-registry:docker-registry
 
   mds-sm:
@@ -313,14 +279,14 @@ services:
       MDS_SM_SF_URL: "http://mds-sf:8888"
       MDS_SM_SYS_USER: "mdsCloud"
       MDS_SM_SYS_ACCOUNT: "1"
-      MDS_SM_SYS_PASSWORD: "MDS_SYS_PASSWORD"
+      MDS_SM_SYS_PASSWORD: 'MDS_SYS_PASSWORD'
     links:
       - mds-qs:mds-qs
       - mysql:mysql
 
-# networks:
-#   elk:
-#     driver: bridge
+networks:
+  default:
+    driver: bridge
 
 volumes:
   mysql-db:
