@@ -30,6 +30,7 @@ below.
 * (Optional) Create the required system items if you will be working with
   serverless functions or any functionality that is dependent upon serverless
   functions.
+  * Note: The commands for these can be found at the end of `./prep.sh` output
 * (Optional) Configure your MDS CLI with with `local` and `localAdmin`
   environments
 * Do whatever work/exploration you're going to do.
