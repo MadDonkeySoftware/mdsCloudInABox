@@ -193,6 +193,11 @@ services:
       MDS_QS_DB_URL: 'redis://redis:6379'
       ORID_PROVIDER_KEY: 'mdsCloud'
       MDS_IDENTITY_URL: 'http://mds-identity:8888'
+      MDS_QS_SF_URL: "http://mds-sf:8888"
+      MDS_QS_SM_URL: "http://mds-sm:8888"
+      MDS_QS_SYS_USER: "mdsCloud"
+      MDS_QS_SYS_ACCOUNT: "1"
+      MDS_QS_SYS_PASSWORD: 'MDS_SYS_PASSWORD'
     links:
       - logstash:logstash
       - redis:redis
