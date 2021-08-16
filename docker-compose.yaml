@@ -162,6 +162,7 @@ services:
       IDENTITY_SECRET_PRIVATE_PASS: 'some-pass'
       IDENTITY_SECRET_PUBLIC: '/root/keys/key.pub.pem'
       ORID_PROVIDER_KEY: 'mdsCloud'
+      MDS_SYS_PASSWORD: 'MDS_SYS_PASSWORD'
     volumes:
       - ./configs/mds-identity:/root/keys:ro
     links:
