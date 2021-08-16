@@ -4,11 +4,13 @@
 # MYSQL_ROOT_PASSWORD=$(tr -dc '(\&\_a-zA-Z0-9\^\*\@' < /dev/urandom | head -c 32)
 # MYSQL_USER_PASSWORD=$(tr -dc '(\&\_a-zA-Z0-9\^\*\@' < /dev/urandom | head -c 32)
 # MONGO_ROOT_PASSWORD=$(tr -dc '(\&\_a-zA-Z0-9\^\*\@' < /dev/urandom | head -c 32)
+# MDS_USER_PASS=$(tr -dc '(\&\_a-zA-Z0-9\^\*\@' < /dev/urandom | head -c 32)
 
 # Without special characters
 MYSQL_ROOT_PASSWORD=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
 MYSQL_USER_PASSWORD=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
 MONGO_ROOT_PASSWORD=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
+MDS_USER_PASS=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
 
 docker-compose down -v;
 docker-compose build;
@@ -59,7 +61,7 @@ echo 'Complete!'
 # https://www.digitalocean.com/community/tutorials/how-to-create-a-self-signed-ssl-certificate-for-nginx-in-ubuntu-18-04
 echo 'Configuring SSH keys for mdsCloudIdentity proxy...'
 rm -f ./nginx-selfsigned.crt ./nginx-selfsigned.key
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 --keyout nginx-selfsigned.key -out nginx-selfsigned.crt -batch
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout nginx-selfsigned.key -out nginx-selfsigned.crt -batch -subj /
 mkdir -p ./configs/mds-identity-proxy
 cp -f ./nginx-selfsigned.crt ./configs/mds-identity-proxy
 cp -f ./nginx-selfsigned.key ./configs/mds-identity-proxy
@@ -78,14 +80,6 @@ sleep 5;
 docker exec mdscloudinabox_mongo_1 mongo -u dbuser -p $MONGO_ROOT_PASSWORD /var/scripts/mongo-init.js;
 echo 'Complete!'
 
-echo 'Starting the identity service so root system user password can be captured.'
-docker-compose up -d mds-identity;
-sleep 30;
-MDS_USER_PASS=$(docker logs mdscloudinabox_mds-identity_1 2>&1 | grep password | sed -n 's/^.*password":"\(\S*\)","msg".*$/\1/p')
-echo 'Complete!'
-
-docker-compose down;
-
 echo 'Attempting to modify your docker-compose.yaml with the new system password'
 awk -f ./config-system-user.awk \
   -v MDS_USER_PASS=$MDS_USER_PASS \
@@ -94,6 +88,14 @@ awk -f ./config-system-user.awk \
 rm -f ./docker-compose.yaml
 mv ./docker-compose-new.yaml ./docker-compose.yaml
 echo 'Complete!'
+
+echo 'Starting the identity service so root system user password can be assigned.'
+docker-compose up -d mds-identity;
+sleep 30;
+# MDS_USER_PASS=$(docker logs mdscloudinabox_mds-identity_1 2>&1 | grep password | sed -n 's/^.*password":"\(\S*\)","msg".*$/\1/p')
+echo 'Complete!'
+
+docker-compose down;
 
 echo 'Attempting to update the docker-registry config so it can utilize MDS Cloud notification service'
 BASE64_MDS_USER_PASS=$(echo -n "mdsCloud:$MDS_USER_PASS" | base64 )
