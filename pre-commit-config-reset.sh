@@ -6,13 +6,16 @@ MONGO_ROOT_PASSWORD='pwd4mongo'
 MDS_USER_PASS='MDS_SYS_PASSWORD'
 BASE64_MDS_USER_PASS='MDS_SYS_PASSWORD'
 
+echo 'Ensuring all docker-compose componenets are cleaned up.'
 docker-compose down;
 
 if [ -f ./docker-compose-new.yaml ]; then
     rm -f ./docker-compose-new.yaml
 fi
+echo 'Complete!'
 
-echo 'Configuring the databases with random passwords'
+
+echo 'Configuring the databases with default passwords'
 NEW_MDS_IDENTITY_DB_URL="mongodb://dbuser:$MONGO_ROOT_PASSWORD@mongo:27017/mds-identity"
 NEW_MDS_FN_MONGO_URL="mongodb://dbuser:$MONGO_ROOT_PASSWORD@mongo:27017"
 NEW_MDS_FN_SM_DB_URL="mysql://root:$MYSQL_ROOT_PASSWORD@mysql/mds-sm"
@@ -38,7 +41,7 @@ rm -f ./configs/mongo-scripts/mongo-init.js
 mv ./configs/mongo-scripts/mongo-init-new.js ./configs/mongo-scripts/mongo-init.js
 echo 'Complete!'
 
-echo 'Attempting to modify your docker-compose.yaml with the new system password'
+echo 'Attempting to modify your docker-compose.yaml with the default system password'
 awk -f ./config-system-user.awk \
   -v MDS_USER_PASS=$MDS_USER_PASS \
   ./docker-compose.yaml >> ./docker-compose-new.yaml
@@ -47,7 +50,7 @@ rm -f ./docker-compose.yaml
 mv ./docker-compose-new.yaml ./docker-compose.yaml
 echo 'Complete!'
 
-echo 'Attempting to update the docker-registry config so it can utilize MDS Cloud notification service'
+echo 'Attempting to update the docker-registry config with the default password'
 awk "\$1 == \"Authorization:\" { \$1 = \"        \" \$1; \$3 = \"$BASE64_MDS_USER_PASS]\" } 1" ./configs/docker-registry/config.yml >> ./configs/docker-registry/config-new.yml
 rm -f ./configs/docker-registry/config.yml
 mv ./configs/docker-registry/config-new.yml ./configs/docker-registry/config.yml
