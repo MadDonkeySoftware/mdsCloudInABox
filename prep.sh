@@ -104,6 +104,27 @@ rm -f ./configs/docker-registry/config.yml
 mv ./configs/docker-registry/config-new.yml ./configs/docker-registry/config.yml
 echo 'Complete!'
 
+EXISTS=$(command -v "mds")
+
+if [ "$EXISTS" = "" ]; then
+  echo 'WARNING: Could not verify your mds CLI install. Automated configuation of the local and localAdmin environments requires the mds CLI to be installed. Skipping configuation.'
+else
+  IS_LOCAL_ENV_SETUP=$(mds env list | grep '^local$' | wc -l)
+  IS_LOCAL_ADMIN_ENV_SETUP=$(mds env list | grep '^localAdmin$' | wc -l)
+
+  mkdir -p ~/.mds
+
+  if [ "$IS_LOCAL_ENV_SETUP" = "0" ]; then
+    echo 'Creating mds CLI "local" environment'
+    echo '{"account": "1001","userId":"myUser","password":"password","identityUrl":"https://127.0.0.1:8081","nsUrl":"http://127.0.0.1:8082","qsUrl":"http://127.0.0.1:8083","fsUrl":"http://127.0.0.1:8084","sfUrl":"http://127.0.0.1:8085","smUrl":"http://127.0.0.1:8086","allowSelfSignCert":true}' >> ~/.mds/local.json
+  fi
+
+  if [ "$IS_LOCAL_ADMIN_ENV_SETUP" = "0" ]; then
+    echo 'Creating mds CLI "localAdmin" environment'
+    echo '{"account": "1","userId":"mdsCloud","password":"password","identityUrl":"https://127.0.0.1:8081","nsUrl":"http://127.0.0.1:8082","qsUrl":"http://127.0.0.1:8083","fsUrl":"http://127.0.0.1:8084","sfUrl":"http://127.0.0.1:8085","smUrl":"http://127.0.0.1:8086","allowSelfSignCert":true}' >> ~/.mds/localAdmin.json
+  fi
+fi
+
 echo "
   ====================================
   ==== Your Auto-configured items ====
