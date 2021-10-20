@@ -5,22 +5,10 @@ CLONE_MODE="$1"
 ORIGIN_USER="$2"
 START_DIR="$PWD"
 
-# Declare all the repos we care about
-declare -a REPOS=(
-	"mdsCloudDocs"
-	"mdsCloudSdkNode"
-	"mdsCloudCli"
-	"mdsCloudFileService"
-	"mdsCloudFnProjectMinion"
-	"mdsCloudIdentity"
-	"mdsCloudNotificationService"
-	"mdsCloudQueueService"
-	"mdsCloudServerlessFunctions"
-	"mdsCloudServerlessFunctions-sampleApp"
-	"mdsCloudStateMachine"
-)
+if [[ -d "./developers" ]]; then
 
-if [[ -f "./README.md" ]]; then
+	source ./developers/include-repos.sh
+
 	for REPO in "${REPOS[@]}"; do
 		cd $START_DIR;
 		if [ ! -d "../$REPO" ]; then

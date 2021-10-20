@@ -15,6 +15,8 @@ services:
       - ./configs/mongo-scripts:/var/scripts:ro
     logging:
       driver: "none"
+    networks:
+      - app
 
   mysql:
     image: mysql:5.7
@@ -32,6 +34,8 @@ services:
       - ./configs/mysql-scripts:/var/scripts:ro
     logging:
       driver: "none"
+    networks:
+      - app
 
   redis:
     image: redis
@@ -40,6 +44,8 @@ services:
       - 6379:6379
     logging:
       driver: "none"
+    networks:
+      - app
 
   elasticsearch:
     build:
@@ -66,6 +72,8 @@ services:
       ELASTIC_PASSWORD: changeme
     logging:
       driver: "none"
+    networks:
+      - app
 
   logstash:
     build:
@@ -93,6 +101,8 @@ services:
       - elasticsearch
     logging:
       driver: "none"
+    networks:
+      - app
 
   kibana:
     build:
@@ -112,6 +122,8 @@ services:
       - elasticsearch
     logging:
       driver: "none"
+    networks:
+      - app
 
   docker-registry:
     image: registry
@@ -120,10 +132,14 @@ services:
       - 5000:5000
     volumes:
       - ./configs/docker-registry/config.yml:/etc/docker/registry/config.yml:ro
-    links:
-      - mds-ns:mds-ns
+    depends_on:
+      - mds-ns
+    # links:
+    #   - mds-ns:mds-ns
     logging:
       driver: "none"
+    networks:
+      - app
 
   docker-registry-ui:
     image: quiq/docker-registry-ui
@@ -132,10 +148,14 @@ services:
       - 5001:5001
     volumes:
       - ./configs/docker-registry-ui/config.yml:/opt/config.yml:ro
-    links:
-      - docker-registry:docker-registry
+    depends_on:
+      - docker-registry
+    # links:
+    #   - docker-registry:docker-registry
     logging:
       driver: "none"
+    networks:
+      - app
 
   mds-identity-proxy:
     image: nginx
@@ -147,8 +167,12 @@ services:
       - ./configs/mds-identity-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./configs/mds-identity-proxy/nginx-selfsigned.crt:/etc/nginx/nginx-selfsigned.crt:ro
       - ./configs/mds-identity-proxy/nginx-selfsigned.key:/etc/nginx/nginx-selfsigned.key:ro
-    links:
-      - mds-identity:mds-identity
+    depends_on:
+      - mds-identity
+    # links:
+    #   - mds-identity:mds-identity
+    networks:
+      - app
 
   mds-identity:
     image: mdscloud/mds-cloud-identity:stable
@@ -165,9 +189,14 @@ services:
       MDS_SYS_PASSWORD: 'MDS_SYS_PASSWORD'
     volumes:
       - ./configs/mds-identity:/root/keys:ro
-    links:
-      - mongo:mongo
-      - logstash:logstash
+    depends_on:
+      - mongo
+      - logstash
+    # links:
+    #   - mongo:mongo
+    #   - logstash:logstash
+    networks:
+      - app
 
   mds-ns:
     image: mdscloud/mds-notification-service:stable
@@ -179,10 +208,16 @@ services:
       REDIS_URL: 'redis://redis:6379'
       ORID_PROVIDER_KEY: 'mdsCloud'
       MDS_IDENTITY_URL: 'http://mds-identity:8888'
-    links:
-      - logstash:logstash
-      - redis:redis
-      - mds-identity:mds-identity
+    depends_on:
+      - logstash
+      - redis
+      - mds-identity
+    # links:
+    #   - logstash:logstash
+    #   - redis:redis
+    #   - mds-identity:mds-identity
+    networks:
+      - app
 
   mds-qs:
     image: mdscloud/mds-queue-service:stable
@@ -199,10 +234,16 @@ services:
       MDS_QS_SYS_USER: "mdsCloud"
       MDS_QS_SYS_ACCOUNT: "1"
       MDS_QS_SYS_PASSWORD: 'MDS_SYS_PASSWORD'
-    links:
-      - logstash:logstash
-      - redis:redis
-      - mds-identity:mds-identity
+    depends_on:
+      - logstash
+      - redis
+      - mds-identity
+    # links:
+    #   - logstash:logstash
+    #   - redis:redis
+    #   - mds-identity:mds-identity
+    networks:
+      - app
 
   mds-fs:
     image: mdscloud/mds-file-service:stable
@@ -217,8 +258,12 @@ services:
       ORID_PROVIDER_KEY: 'mdsCloud'
     volumes:
       - file-service-data:/UploadService
-    links:
-      - logstash:logstash
+    depends_on:
+      - logstash
+    # links:
+    #   - logstash:logstash
+    networks:
+      - app
 
   mds-sf:
     image: mdscloud/mds-serverless-functions:stable
@@ -240,13 +285,22 @@ services:
       MDS_FN_PROVIDER_CONFIG: /configs/provider-config.json
     volumes:
       - ./configs/mds-sf/provider-config.json:/configs/provider-config.json:ro
-    links:
-      - logstash:logstash
-      - mongo:mongo
-      - mds-qs:mds-qs
-      - mds-fs:mds-fs
-      - mds-ns:mds-ns
-      - mds-sf-dockerMinion:mds-sf-dockerMinion
+    depends_on:
+      - logstash
+      - mongo
+      - mds-qs
+      - mds-fs
+      - mds-ns
+      - mds-sf-dockerMinion
+    # links:
+    #   - logstash:logstash
+    #   - mongo:mongo
+    #   - mds-qs:mds-qs
+    #   - mds-fs:mds-fs
+    #   - mds-ns:mds-ns
+    #   - mds-sf-dockerMinion:mds-sf-dockerMinion
+    networks:
+      - app
 
   mds-sf-dockerMinion:
     image: mdscloud/mds-docker-minion:stable
@@ -259,14 +313,24 @@ services:
       MDS_FN_RUNTIMES: "node"
       MDS_FN_MONGO_URL: 'mongodb://dbuser:pwd4mongo@mongo:27017'
       MDS_FN_CONTAINER_HOST: "docker-registry:5000"
-      MDS_FN_CONTAINER_NETWORK: "mdscloudinabox_default"
+      MDS_FN_CONTAINER_NETWORK: "mdscloudinabox_app"
+      MDS_FN_SYS_USER: "mdsCloud"
+      MDS_FN_SYS_ACCOUNT: "1"
+      MDS_FN_SYS_PASSWORD: 'MDS_SYS_PASSWORD'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    links:
-      - logstash:logstash
-      - mongo:mongo
-      - mds-fs:mds-fs
-      - docker-registry:docker-registry
+    depends_on:
+      - logstash
+      - mongo
+      - mds-fs
+      - docker-registry
+    # links:
+    #   - logstash:logstash
+    #   - mongo:mongo
+    #   - mds-fs:mds-fs
+    #   - docker-registry:docker-registry
+    networks:
+      - app
 
   mds-sm:
     image: mdscloud/mds-state-machine:stable
@@ -286,13 +350,18 @@ services:
       MDS_SM_SYS_USER: "mdsCloud"
       MDS_SM_SYS_ACCOUNT: "1"
       MDS_SM_SYS_PASSWORD: 'MDS_SYS_PASSWORD'
-    links:
-      - mds-qs:mds-qs
-      - mysql:mysql
+    depends_on:
+      - mds-qs
+      - mysql
+    # links:
+    #   - mds-qs:mds-qs
+    #   - mysql:mysql
+    networks:
+      - app
 
+# MDS_FN_CONTAINER_NETWORK
 networks:
-  default:
-    driver: bridge
+  app:
 
 volumes:
   mysql-db:

@@ -104,9 +104,9 @@ rm -f ./configs/docker-registry/config.yml
 mv ./configs/docker-registry/config-new.yml ./configs/docker-registry/config.yml
 echo 'Complete!'
 
-EXISTS=$(command -v "mds")
+MDS_CMD_EXISTS=$(command -v "mds")
 
-if [ "$EXISTS" = "" ]; then
+if [ "$MDS_CMD_EXISTS" = "" ]; then
   echo 'WARNING: Could not verify your mds CLI install. Automated configuation of the local and localAdmin environments requires the mds CLI to be installed. Skipping configuation.'
 else
   IS_LOCAL_ENV_SETUP=$(mds env list | grep '^local$' | wc -l)
@@ -114,15 +114,34 @@ else
 
   mkdir -p ~/.mds
 
+  if [ -f ~/.mds/cache ]; then
+    echo 'Cleaning out mds CLI token cache file'
+    rm -f ~/.mds/cache
+  fi
+
   if [ "$IS_LOCAL_ENV_SETUP" = "0" ]; then
     echo 'Creating mds CLI "local" environment'
-    echo '{"account": "1001","userId":"myUser","password":"password","identityUrl":"https://127.0.0.1:8081","nsUrl":"http://127.0.0.1:8082","qsUrl":"http://127.0.0.1:8083","fsUrl":"http://127.0.0.1:8084","sfUrl":"http://127.0.0.1:8085","smUrl":"http://127.0.0.1:8086","allowSelfSignCert":true}' >> ~/.mds/local.json
+  else
+    echo 'Updating mds CLI "local" environment'
+    rm -f ~/.mds/local.json
   fi
+  echo '{"account": "1001","userId":"myUser","password":"password","identityUrl":"https://127.0.0.1:8081","nsUrl":"http://127.0.0.1:8082","qsUrl":"http://127.0.0.1:8083","fsUrl":"http://127.0.0.1:8084","sfUrl":"http://127.0.0.1:8085","smUrl":"http://127.0.0.1:8086","allowSelfSignCert":true}' >> ~/.mds/local.json
 
   if [ "$IS_LOCAL_ADMIN_ENV_SETUP" = "0" ]; then
     echo 'Creating mds CLI "localAdmin" environment'
-    echo '{"account": "1","userId":"mdsCloud","password":"password","identityUrl":"https://127.0.0.1:8081","nsUrl":"http://127.0.0.1:8082","qsUrl":"http://127.0.0.1:8083","fsUrl":"http://127.0.0.1:8084","sfUrl":"http://127.0.0.1:8085","smUrl":"http://127.0.0.1:8086","allowSelfSignCert":true}' >> ~/.mds/localAdmin.json
+  else
+    echo 'Updating mds CLI "localAdmin" environment'
+    rm -f ~/.mds/localAdmin.json
   fi
+  echo '{"account": "1","userId":"mdsCloud","password":"'"$MDS_USER_PASS"'","identityUrl":"https://127.0.0.1:8081","nsUrl":"http://127.0.0.1:8082","qsUrl":"http://127.0.0.1:8083","fsUrl":"http://127.0.0.1:8084","sfUrl":"http://127.0.0.1:8085","smUrl":"http://127.0.0.1:8086","allowSelfSignCert":true}' >> ~/.mds/localAdmin.json
+
+  echo 'Starting system to create various dependencies under the localAdmin environment/account'
+  docker-compose up -d
+  mds qs create --env localAdmin mdsCloudServerlessFunctions-FnProjectWork
+  mds qs create --env localAdmin mdsCloudServerlessFunctions-FnProjectWork-dlq
+  mds qs create --env localAdmin mds-sm-pendingQueue
+  mds qs create --env localAdmin mds-sm-inFlightQueue
+  mds fs create --env localAdmin mdsCloudServerlessFunctionsWork
 fi
 
 echo "
@@ -142,18 +161,16 @@ echo 'If any values are blank please fully tear down the environment with the'
 echo 'command "docker-compose down -v" then re-run the prep script. If you need'
 echo 'to reference these passwords later a file named "development-passwords.txt"'
 echo 'has been created for you in this directory.'
-echo ''
-echo "If you are using the MDS CLI don't forget to update any appropriate"
-echo 'environtment configuraitons!'
-echo "Ex: mds config --env localAdmin write password $MDS_USER_PASS"
-echo ''
-echo 'Once your MDS CLI administrator config is updated and the docker-compose env.'
-echo 'is running, create the appropriate system level items. You may need to remove '
-echo 'your mds credential cache located at ~/.mds/cache if you encounter errors.'
-echo ''
-echo 'mds qs create --env localAdmin mdsCloudServerlessFunctions-FnProjectWork'
-echo 'mds qs create --env localAdmin mdsCloudServerlessFunctions-FnProjectWork-dlq'
-echo 'mds qs create --env localAdmin mds-sm-pendingQueue'
-echo 'mds qs create --env localAdmin mds-sm-inFlightQueue'
-echo 'mds fs create --env localAdmin mdsCloudServerlessFunctionsWork'
+if [ "$MDS_CMD_EXISTS" = "" ]; then
+  echo ''
+  echo 'Once your MDS CLI administrator config is updated and the docker-compose env.'
+  echo 'is running, create the appropriate system level items. You may need to remove '
+  echo 'your mds credential cache located at ~/.mds/cache if you encounter errors.'
+  echo ''
+  echo 'mds qs create --env localAdmin mdsCloudServerlessFunctions-FnProjectWork'
+  echo 'mds qs create --env localAdmin mdsCloudServerlessFunctions-FnProjectWork-dlq'
+  echo 'mds qs create --env localAdmin mds-sm-pendingQueue'
+  echo 'mds qs create --env localAdmin mds-sm-inFlightQueue'
+  echo 'mds fs create --env localAdmin mdsCloudServerlessFunctionsWork'
+fi
 echo ''
